@@ -1,7 +1,13 @@
+import 'dart:async';
+
+import 'package:appsflyer_sdk/appsflyer_sdk.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_web_frame/flutter_web_frame.dart';
 
-void main() {
+void main() async {
+
+  AppsFlyerUtils().initAppsFlyer();
   runApp(const MyApp());
 }
 
@@ -64,24 +70,23 @@ class _MyHomePageState extends State<MyHomePage> {
   int _counter = 0;
 
   void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+    AppsFlyerUtils().generateLink(source: LinkSource.post, id: '1234');
   }
+
+
 
   @override
   Widget build(BuildContext context) {
+    final double width = MediaQuery.of(context).size.width;
+    final double height = MediaQuery.of(context).size.height;
+    debugPrint('Screen is of $height height and $width width');
     // This method is rerun every time setState is called, for instance as done
     // by the _incrementCounter method above.
     //
     // The Flutter framework has been optimized to make rerunning build methods
     // fast, so that you can just rebuild anything that needs updating rather
     // than having to individually change instances of widgets.
+
     return Scaffold(
       appBar: AppBar(
         // TRY THIS: Try changing the color here to a specific color (to
@@ -129,3 +134,135 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 }
+
+enum LinkSource { post, publisher }
+
+class AppsFlyerConsts {
+  static const String oneLinkId = 'X55i';
+  static const String devKey = '';
+  static const String appId = '6504837429';
+  static const String channel = 'user_share';
+  static const String brandDomain = 'pukpuk.onelink.me';
+  static const String postShare = 'post_share';
+  static const String publisherShare = 'publisher_share';
+}
+
+class AppsFlyerUtils {
+  AppsflyerSdk appsflyerSdk = AppsflyerSdk(appsFlyerOptions);
+
+  Future initAppsFlyer() async {
+    await _initAppsFlyer();
+    onDeepLinking();
+    appsflyerSdk.startSDK();
+  }
+
+  Future _initAppsFlyer() async {
+    await appsflyerSdk.initSdk(
+      registerConversionDataCallback: true,
+      registerOnAppOpenAttributionCallback: true,
+      registerOnDeepLinkingCallback: true,
+    );
+  }
+
+  static AppsFlyerOptions appsFlyerOptions = AppsFlyerOptions(
+    afDevKey: AppsFlyerConsts.devKey,
+    appId: AppsFlyerConsts.appId,
+    showDebug: false,
+    timeToWaitForATTUserAuthorization: 50, // for iOS 14.5
+    appInviteOneLink: AppsFlyerConsts.oneLinkId, // Optional field
+    disableAdvertisingIdentifier: false, // Optional field
+    disableCollectASA: false, //Optional field
+    manualStart: true,
+  ); // Optional field
+
+  Future<String?> generateLink({
+    required LinkSource source,
+    required String id,
+  }) async {
+
+
+    // Create a Completer
+    Completer<String?> completer = Completer<String?>();
+
+    appsflyerSdk.generateInviteLink(
+      AppsFlyerInviteLinkParams(
+        brandDomain: AppsFlyerConsts.brandDomain,
+        channel: AppsFlyerConsts.channel,
+      ),
+      (result) {
+        debugPrint('generateInviteLink callback: $result');
+        String userInviteURL = result['payload']['userInviteURL'];
+        debugPrint('generateInviteLink userInviteURL: $userInviteURL');
+
+        // Complete the Future with the userInviteURL
+        completer.complete(userInviteURL);
+      },
+      (error) {
+        debugPrint('generateInviteLink error: $error');
+
+        // Complete the Future with null in case of an error
+        completer.complete(null);
+      },
+    );
+
+    // Await the Future completion
+    return completer.future;
+  }
+
+  onDeepLinking() {
+    appsflyerSdk.onDeepLinking((DeepLinkResult dp) {
+      switch (dp.status) {
+        case Status.FOUND:
+          debugPrint(dp.deepLink?.toString());
+          _ClickEvent link = _ClickEvent((dp.deepLink?.clickEvent));
+          String? deepLinkValue = link.deepLinkValue;
+          String? id = link.deepLinkSub1;
+          debugPrint("deep link value: $deepLinkValue id: $id");
+          if (deepLinkValue != null && id != null) {
+          }
+          break;
+        case Status.NOT_FOUND:
+          debugPrint("deep link not found");
+          break;
+        case Status.ERROR:
+          debugPrint("deep link error: ${dp.error}");
+          break;
+        case Status.PARSE_ERROR:
+          debugPrint("deep link status parsing error");
+          break;
+      }
+    });
+  }
+
+
+}
+
+class _ClickEvent {
+  final Map<String, dynamic>? data;
+  _ClickEvent(this.data);
+
+  String? get deepLinkValue => data?['deep_link_value'];
+  String? get deepLinkSub1 => data?['deep_link_sub1'];
+}
+
+class NavigationService {
+  String? _postId;
+  String? _publisherId;
+
+  set postRedirect(String postId) {
+    _postId = postId;
+  }
+
+  set publisherRedirect(String publisher) {
+    _publisherId = publisher;
+  }
+
+  void reset() {
+    _postId = null;
+    _publisherId = null;
+  }
+
+  String? get postId => _postId;
+  String? get publisherId => _publisherId;
+}
+
